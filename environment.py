@@ -1,7 +1,7 @@
 import numpy as np
 
 class DeliveryEnvironment:
-    def __init__(self, num_locations=10, grid_size=10):
+    def __init__(self, num_locations=50, grid_size=50):
         self.num_locations = num_locations
         self.grid_size = grid_size
         self.locations = self._generate_locations()
