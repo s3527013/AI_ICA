@@ -2,20 +2,19 @@ import json
 
 import numpy as np
 from IPython.display import display, Markdown
-from models.dqn import DQNAgent
-from models.q_learning import QLearningAgent
-from models.sarsa import SarsaAgent
 
+from dqn import DQNAgent
 from environment import DeliveryEnvironment
-from main_with_google_ai import GoogleAIModelExplainer
-from osm_client import OSMClient  # Import OSMClient for the fallback
-from visualize import plot_learning_curves, plot_comparison, plot_osmnx_route, plot_delivery_route
+from google_LLM import GoogleAIModelExplainer
+from osm_client import OSMClient
+from q_learning import QLearningAgent
+from sarsa import SarsaAgent
+from visualize import plot_learning_curves, plot_comparison, plot_osmnx_route, plot_tuning_impact, plot_delivery_route
 
 
 def generate_random_locations(city_name, num_locations):
     """
     Generates random coordinates within a given city's bounding box using OSM.
-    This serves as a fallback if the AI location generation fails.
     """
     print(f"Falling back to generating random 'live' locations in {city_name}...")
     osm = OSMClient()
@@ -25,7 +24,6 @@ def generate_random_locations(city_name, num_locations):
         return None
 
     min_lat, max_lat, min_lon, max_lon = bbox
-
     lats = np.random.uniform(min_lat, max_lat, num_locations)
     lons = np.random.uniform(min_lon, max_lon, num_locations)
 
@@ -110,15 +108,12 @@ def main():
     CITY = "Middlesbrough"
     NUM_PARCELS = 10
     DISTANCE_METRIC = 'network'
-    NUM_EPISODES = 2000
+    NUM_EPISODES_TUNE = 500
+    NUM_EPISODES_FINAL = 2000
 
-    # --- 1. INITIALIZE AI ---
+    # --- 1. INITIALIZE AI & LOCATIONS ---
     explainer = GoogleAIModelExplainer()
-
-    # --- 2. GENERATE LOCATIONS ---
     locations_list = None
-    locations_coords = None
-
     if explainer.available:
         print(f"Using Gemini to generate {NUM_PARCELS + 1} locations in {CITY}...")
         locations_list = explainer.generate_locations_for_city(CITY, NUM_PARCELS + 1)
@@ -126,11 +121,8 @@ def main():
     if locations_list:
         env = DeliveryEnvironment(addresses=locations_list, city_name=CITY, distance_metric=DISTANCE_METRIC)
     else:
-        # Fallback to generating random coordinates
         locations_coords = generate_random_locations(CITY, NUM_PARCELS + 1)
-        if locations_coords is None:
-            print("Could not generate locations. Exiting.")
-            return
+        if locations_coords is None: return
         env = DeliveryEnvironment(locations=locations_coords, city_name=CITY, distance_metric=DISTANCE_METRIC)
 
     agents = {
@@ -139,16 +131,17 @@ def main():
         "DQN": DQNAgent(state_size=env.get_state_size(), action_size=env.num_locations)
     }
 
-    # --- 3. INITIAL TRAINING & AI-TUNING ---
+    # --- 2. INITIAL TRAINING & AI-TUNING ---
     tuned_params = {}
+    initial_reward_histories = {}
     print("\\n--- Initial Training & Hyperparameter Tuning ---")
     for name, agent in agents.items():
         print(f"Training {name} for tuning...")
-        reward_history = train_agent(agent, env, 500, isinstance(agent, DQNAgent))
+        initial_reward_histories[name] = train_agent(agent, env, NUM_EPISODES_TUNE, isinstance(agent, DQNAgent))
 
         if explainer.available:
             print(f"Asking Gemini for hyperparameter recommendations for {name}...")
-            recommendations = explainer.provide_hyperparameter_recommendations(name, reward_history)
+            recommendations = explainer.provide_hyperparameter_recommendations(name, initial_reward_histories[name])
             if isinstance(recommendations, dict):
                 tuned_params[name] = recommendations
                 print(f"  > AI recommends: {recommendations}")
@@ -158,40 +151,46 @@ def main():
         else:
             tuned_params[name] = {}
 
-    # --- 4. OPTIMIZED TRAINING ---
+    # --- 3. OPTIMIZED TRAINING ---
     print("\\n--- Optimized Training Run ---")
     final_results = {}
-    reward_histories = {}
+    optimized_reward_histories = {}
     best_route_info = {"agent": None, "route": [], "distance": float('inf')}
+
+    # Re-initialize agents to apply new params from scratch
+    agents = {
+        "Q-Learning": QLearningAgent(action_space=list(range(env.num_locations))),
+        "SARSA": SarsaAgent(action_space=list(range(env.num_locations))),
+        "DQN": DQNAgent(state_size=env.get_state_size(), action_size=env.num_locations)
+    }
 
     for name, agent in agents.items():
         if name in tuned_params:
             for param, value in tuned_params[name].items():
-                if hasattr(agent, param):
-                    setattr(agent, param, value)
+                if hasattr(agent, param): setattr(agent, param, value)
 
         print(f"Training {name} with optimized parameters...")
-        reward_histories[name] = train_agent(agent, env, NUM_EPISODES, isinstance(agent, DQNAgent))
+        optimized_reward_histories[name] = train_agent(agent, env, NUM_EPISODES_FINAL, isinstance(agent, DQNAgent))
 
         route, distance = evaluate_agent(agent, env, isinstance(agent, DQNAgent))
-        final_results[name] = {"total_distance_km": distance, "avg_reward": np.mean(reward_histories[name][-100:])}
+        final_results[name] = {"total_distance_km": distance,
+                               "avg_reward": np.mean(optimized_reward_histories[name][-100:])}
 
         if distance < best_route_info["distance"]:
             best_route_info = {"agent": name, "route": route, "distance": distance}
 
-    # --- 5. FINAL AI ANALYSIS ---
+    # --- 4. FINAL AI ANALYSIS ---
     if explainer.available:
         print("\\n--- Final AI-Powered Analysis ---")
         env_config = env.get_environment_summary()
-        env_config["episodes"] = NUM_EPISODES
-
+        env_config["episodes"] = NUM_EPISODES_FINAL
         analysis = explainer.analyze_performance(final_results, env_config)
         display(Markdown(analysis))
     else:
         print("\\n--- Final Results (Local Analysis) ---")
         print(json.dumps(final_results, indent=2))
 
-    # --- 6. DELIVERY SEQUENCE ---
+    # --- 5. DELIVERY SEQUENCE ---
     print("\\n--- Optimized Delivery Sequence ---")
     print(f"Best Algorithm: {best_route_info['agent']}")
     print(f"Total Distance: {best_route_info['distance']:.2f} km")
@@ -205,14 +204,17 @@ def main():
         else:
             print(f"  {step}.     {address}")
 
-    # --- 7. VISUALIZATION ---
+    # --- 6. VISUALIZATION ---
     print("\\n--- Generating Visualizations ---")
-    plot_learning_curves(reward_histories)
+    plot_tuning_impact(initial_reward_histories, optimized_reward_histories)
+    plot_learning_curves(optimized_reward_histories, title="Optimized Agent Learning Curves")
     plot_comparison(final_results)
 
     if env.osmnx_client:
         best_route_nodes = [env.nodes[i] for i in best_route_info["route"]]
         plot_osmnx_route(env.osmnx_client.G, best_route_nodes, file_path=f"best_route_{CITY.lower()}_final.png")
+        plot_delivery_route(locations=env.locations, route=best_route_info["route"], file_path="best_route_final.html")
+
     else:
         plot_delivery_route(locations=env.locations, route=best_route_info["route"], file_path="best_route_final.html")
 

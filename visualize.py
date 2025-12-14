@@ -68,6 +68,48 @@ def plot_learning_curves(reward_histories, title="RL Agent Learning Curves"):
     plt.savefig("learning_curves.png")
     plt.show()
 
+def plot_tuning_impact(initial_histories, optimized_histories):
+    """
+    Plots the learning curves before and after hyperparameter tuning for each agent.
+    """
+    agents = list(initial_histories.keys())
+    num_agents = len(agents)
+    
+    fig, axes = plt.subplots(num_agents, 1, figsize=(12, 6 * num_agents))
+    if num_agents == 1:
+        axes = [axes]
+        
+    for i, agent_name in enumerate(agents):
+        ax = axes[i]
+        
+        # Plot Initial
+        initial_rewards = initial_histories.get(agent_name, [])
+        window_size = max(1, len(initial_rewards) // 20)
+        if len(initial_rewards) >= window_size:
+            initial_avg = np.convolve(initial_rewards, np.ones(window_size)/window_size, mode='valid')
+            ax.plot(initial_avg, label='Before Tuning (Moving Avg)', linestyle='--', alpha=0.7)
+        else:
+            ax.plot(initial_rewards, label='Before Tuning', linestyle='--', alpha=0.7)
+            
+        # Plot Optimized
+        opt_rewards = optimized_histories.get(agent_name, [])
+        window_size = max(1, len(opt_rewards) // 20)
+        if len(opt_rewards) >= window_size:
+            opt_avg = np.convolve(opt_rewards, np.ones(window_size)/window_size, mode='valid')
+            ax.plot(opt_avg, label='After Tuning (Moving Avg)', linewidth=2)
+        else:
+            ax.plot(opt_rewards, label='After Tuning', linewidth=2)
+            
+        ax.set_title(f"Hyperparameter Tuning Impact: {agent_name}")
+        ax.set_xlabel("Episodes")
+        ax.set_ylabel("Total Reward")
+        ax.legend()
+        ax.grid(True)
+        
+    plt.tight_layout()
+    plt.savefig("tuning_impact.png")
+    plt.show()
+
 def plot_delivery_route(locations, route, depot_index=0, file_path="delivery_route.html"):
     if locations.size == 0:
         print("Cannot plot route: No locations provided.")

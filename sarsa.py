@@ -1,6 +1,6 @@
-import numpy as np
 import random
 from collections import defaultdict
+
 
 class SarsaAgent:
     def __init__(self, action_space, alpha=0.1, gamma=0.9, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01):
@@ -21,7 +21,7 @@ class SarsaAgent:
         self.epsilon = epsilon
         self.epsilon_decay = epsilon_decay
         self.epsilon_min = epsilon_min
-        
+
         self.q_table = defaultdict(lambda: 0.0)
 
     def choose_action(self, state, possible_actions):
@@ -51,7 +51,7 @@ class SarsaAgent:
             next_action: The action to be taken in the next state.
         """
         old_value = self.q_table.get((state, action), 0.0)
-        
+
         # Get Q-value of the next state and next action
         next_q_value = self.q_table.get((next_state, next_action), 0.0)
 
