@@ -1,8 +1,8 @@
 import numpy as np
 from environment import DeliveryEnvironment
-from q_learning import QLearningAgent
-from sarsa import SarsaAgent
-from dqn import DQNAgent
+from models.q_learning import QLearningAgent
+from models.sarsa import SarsaAgent
+from models.dqn import DQNAgent
 from visualize import plot_comparison
 
 

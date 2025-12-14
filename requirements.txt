@@ -9,3 +9,7 @@ streamlit
 protobuf
 networkx
 osmnx
+ipython
+geopy
+requests
+python-dotenv

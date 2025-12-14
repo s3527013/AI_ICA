@@ -2,9 +2,9 @@ import numpy as np
 import time
 from environment import DeliveryEnvironment
 from visualize import plot_delivery_route, plot_learning_curves, plot_comparison, plot_osmnx_route
-from q_learning import QLearningAgent
-from sarsa import SarsaAgent
-from dqn import DQNAgent
+from models.q_learning import QLearningAgent
+from models.sarsa import SarsaAgent
+from models.dqn import DQNAgent
 from osm_client import OSMClient
 
 def generate_random_locations(city_name, num_locations):
