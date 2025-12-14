@@ -1,5 +1,11 @@
 numpy
 torch
-protobuf
 matplotlib
+folium
+googlemaps
 pandas
+plotly
+streamlit
+protobuf
+networkx
+osmnx
