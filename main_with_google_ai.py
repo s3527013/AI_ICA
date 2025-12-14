@@ -11,7 +11,7 @@ class GoogleAIModelExplainer:
     Google Gemini AI-based explanation tool for reinforcement learning models.
     """
 
-    def __init__(self, api_key="AIzaSyBfsi7jvEOyXTfgjQnbko328wV4TeEixcY", model_name="gemini-2.5-flash"):
+    def __init__(self, api_key="AIzaSyC2zXkxgpMGwEHZXiBckkAxb0GFKVO0Zj4", model_name="gemini-2.5-pro"):
         self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
         self.model_name = model_name
 

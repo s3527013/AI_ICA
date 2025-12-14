@@ -1,8 +1,10 @@
 import numpy as np
 from osm_client import OSMClient, OSMNXClient
 
+
 class DeliveryEnvironment:
-    def __init__(self, addresses=None, locations=None, city_name=None, map_provider='google', api_key=None, distance_metric='driving'):
+    def __init__(self, addresses=None, locations=None, city_name=None, map_provider='google', api_key=None,
+                 distance_metric='driving'):
         self.distance_metric = distance_metric
         self.city_name = city_name
         self.osmnx_client = None
@@ -15,11 +17,12 @@ class DeliveryEnvironment:
             self.addresses = addresses
             if map_provider == 'osm' or self.distance_metric != 'driving':
                 geocoding_client = OSMClient()
+                self.locations = self._get_locations_from_addresses(geocoding_client)
         else:
             raise ValueError("You must provide either 'addresses' or 'locations'.")
 
         self.num_locations = len(self.locations)
-        
+
         if self.num_locations > 0:
             self.distance_matrix = self._get_distance_matrix(map_provider, api_key)
         else:
@@ -47,14 +50,14 @@ class DeliveryEnvironment:
             matrix, self.nodes = self.osmnx_client.get_distance_matrix(self.locations)
             return matrix
         # ... (other distance metrics)
-        return self._manhattan_distance_matrix() # Fallback
+        return self._manhattan_distance_matrix()  # Fallback
 
     def _manhattan_distance_matrix(self):
         num_locs = self.num_locations
         matrix = np.zeros((num_locs, num_locs))
         for i in range(num_locs):
             for j in range(i + 1, num_locs):
-                dist = np.abs(self.locations[i] - self.locations[j]).sum() * 111000 # Approx conversion
+                dist = np.abs(self.locations[i] - self.locations[j]).sum() * 111000  # Approx conversion
                 matrix[i][j] = dist
                 matrix[j][i] = dist
         return matrix
@@ -97,10 +100,10 @@ class DeliveryEnvironment:
             current_idx, remaining = self._get_state()
         else:
             current_idx, remaining = state_tuple
-        
+
         current_address = self.addresses[current_idx]
         remaining_count = len(remaining)
-        
+
         return (f"**Current Location**: {current_address} (Index: {current_idx})\\n"
                 f"**Deliveries Remaining**: {remaining_count} out of {self.num_locations - 1}")
 
