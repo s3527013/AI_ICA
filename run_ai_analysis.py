@@ -35,7 +35,7 @@ def generate_random_locations(city_name, num_locations):
 
 
 def train_agent(agent, env, num_episodes, is_dqn=False):
-    # ... (rest of the function is unchanged)
+    """A unified training function for all agent types."""
     reward_history = []
     for episode in range(num_episodes):
         state = env.reset(vectorized=is_dqn)
@@ -75,7 +75,6 @@ def train_agent(agent, env, num_episodes, is_dqn=False):
 
 
 def evaluate_agent(agent, env, is_dqn=False):
-    # ... (rest of the function is unchanged)
     state = env.reset(vectorized=is_dqn)
     route = [env.start_pos_index]
     total_distance = 0
@@ -192,7 +191,21 @@ def main():
         print("\\n--- Final Results (Local Analysis) ---")
         print(json.dumps(final_results, indent=2))
 
-    # --- 6. VISUALIZATION ---
+    # --- 6. DELIVERY SEQUENCE ---
+    print("\\n--- Optimized Delivery Sequence ---")
+    print(f"Best Algorithm: {best_route_info['agent']}")
+    print(f"Total Distance: {best_route_info['distance']:.2f} km")
+    print("Route:")
+    for step, loc_index in enumerate(best_route_info["route"]):
+        address = env.addresses[loc_index]
+        if step == 0:
+            print(f"  Start: {address}")
+        elif step == len(best_route_info["route"]) - 1:
+            print(f"  End:   {address} (Return to Depot)")
+        else:
+            print(f"  {step}.     {address}")
+
+    # --- 7. VISUALIZATION ---
     print("\\n--- Generating Visualizations ---")
     plot_learning_curves(reward_histories)
     plot_comparison(final_results)
