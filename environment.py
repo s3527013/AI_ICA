@@ -24,7 +24,7 @@ class DeliveryEnvironment:
         self.num_locations = len(self.locations)
 
         if self.num_locations > 0:
-            self.distance_matrix = self._get_distance_matrix(map_provider, api_key)
+            self.distance_matrix = self._get_distance_matrix()
         else:
             self.distance_matrix = np.array([])
 
@@ -43,7 +43,7 @@ class DeliveryEnvironment:
                 locations.append((lat, lng))
         return np.array(locations)
 
-    def _get_distance_matrix(self, map_provider, api_key):
+    def _get_distance_matrix(self):
         if self.distance_metric == 'network':
             if not self.city_name: raise ValueError("A 'city_name' must be provided for 'network' metric.")
             self.osmnx_client = OSMNXClient(self.city_name)

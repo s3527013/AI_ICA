@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import google.generativeai as genai
 import numpy as np
@@ -11,13 +11,13 @@ class GoogleAIModelExplainer:
     Google Gemini AI-based explanation tool for reinforcement learning models.
     """
 
-    def __init__(self, api_key="AIzaSyC2zXkxgpMGwEHZXiBckkAxb0GFKVO0Zj4", model_name="gemini-2.5-pro"):
+    def __init__(self, api_key=None, model_name="gemini-pro"):
         self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
         self.model_name = model_name
 
         if not self.api_key:
             print("Warning: No Google API key provided. Using local analysis only.")
-
+        
         self._configure_google_ai()
 
     def _configure_google_ai(self):
@@ -32,9 +32,10 @@ class GoogleAIModelExplainer:
             print(f"Error configuring Google AI: {e}")
             self.available = False
 
-    def generate_locations_for_city(self, city: str, num_locations: int) -> List[str]:
+    def generate_locations_for_city(self, city: str, num_locations: int) -> Optional[List[str]]:
         """
         Uses Google Gemini to generate a list of realistic delivery addresses in a city.
+        Returns None if AI is unavailable or fails, triggering the fallback.
         """
         prompt = f"""
         You are a logistics planning assistant. I need to create a simulation for a delivery vehicle in {city}.
@@ -44,10 +45,10 @@ class GoogleAIModelExplainer:
         Return the list as a JSON array of strings. For example:
         ["Depot, Central Middlesbrough", "Teesside University, Middlesbrough", "Riverside Stadium, Middlesbrough", ...]
         """
-
+        
         if not self.available:
-            print("Google AI not available. Returning generic locations.")
-            return [f"Generic Location {i}, {city}" for i in range(num_locations)]
+            print("Google AI not available for location generation.")
+            return None
 
         try:
             response = self.model.generate_content(prompt)
@@ -57,11 +58,12 @@ class GoogleAIModelExplainer:
             if isinstance(locations, list) and len(locations) == num_locations:
                 return locations
             else:
-                raise ValueError("AI did not return the expected list format.")
+                print("AI returned unexpected format.")
+                return None
         except (Exception, json.JSONDecodeError) as e:
-            print(f"Failed to generate locations with AI, using fallback. Error: {e}")
-            # Fallback to generic locations
-            return [f"Depot, {city}"] + [f"Random Street {i}, {city}" for i in range(1, num_locations)]
+            print(f"Failed to generate locations with AI. Error: {e}")
+            return None
+
 
     def analyze_performance(self, results: Dict[str, Dict], env_config: Dict) -> str:
         results_str = self._format_results_for_google(results)
@@ -96,8 +98,7 @@ class GoogleAIModelExplainer:
         if len(performance_history) < 10:
             return "Not enough data for tuning recommendations."
 
-        trend = "improving" if np.mean(performance_history[-10:]) > np.mean(
-            performance_history[:10]) else "stagnant or degrading"
+        trend = "improving" if np.mean(performance_history[-10:]) > np.mean(performance_history[:10]) else "stagnant or degrading"
 
         prompt = f"""
         As an expert in reinforcement learning, analyze the performance of a {agent_type} agent.
@@ -122,8 +123,7 @@ class GoogleAIModelExplainer:
                 return f"AI recommendations failed: {e}"
         return "AI recommendations not available."
 
-    def generate_training_report(self, training_history: Dict[str, List[float]], final_results: Dict[str, Dict],
-                                 env_config: Dict) -> str:
+    def generate_training_report(self, training_history: Dict[str, List[float]], final_results: Dict[str, Dict], env_config: Dict) -> str:
         # This method can be expanded similarly to the others
         return "Training report generation is a premium feature."
 
