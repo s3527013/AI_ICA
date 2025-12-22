@@ -71,8 +71,13 @@ class OSMNXClient:
         
         print(f"Downloading street network for {place_name}...")
         # Download the graph for driving
-        self.G = ox.graph_from_place(place_name, network_type='drive')
-        print("Graph downloaded.")
+        G_full = ox.graph_from_place(place_name, network_type='drive')
+        
+        # Keep only the largest connected component to avoid isolated nodes
+        largest_component = max(nx.weakly_connected_components(G_full), key=len)
+        self.G = G_full.subgraph(largest_component).copy()
+        
+        print(f"Graph downloaded and processed. Using the largest connected component with {len(self.G.nodes)} nodes.")
 
     def get_nearest_nodes(self, locations):
         """
@@ -91,8 +96,6 @@ class OSMNXClient:
         matrix = np.zeros((n, n))
         
         print("Calculating network distance matrix (this may take a while)...")
-        # Note: For very large N, this loop can be slow. 
-        # But for ~20-100 locations it's manageable.
         for i in range(n):
             for j in range(n):
                 if i == j:
@@ -102,6 +105,7 @@ class OSMNXClient:
                     length = nx.shortest_path_length(self.G, nodes[i], nodes[j], weight='length')
                     matrix[i][j] = length
                 except nx.NetworkXNoPath:
-                    matrix[i][j] = float('inf') # Unreachable
+                    # If no path, set to infinity. This will be handled in the environment.
+                    matrix[i][j] = float('inf')
         
         return matrix, nodes

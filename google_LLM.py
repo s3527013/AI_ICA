@@ -6,18 +6,33 @@ import google.generativeai as genai
 import numpy as np
 
 
+class NumpyEncoder(json.JSONEncoder):
+    """ Custom encoder for numpy data types """
+
+    def default(self, obj):
+        if isinstance(obj, (np.int_, np.intc, np.intp, np.int8,
+                            np.int16, np.int32, np.int64, np.uint8,
+                            np.uint16, np.uint32, np.uint64)):
+            return int(obj)
+        elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
+            return float(obj)
+        elif isinstance(obj, (np.ndarray,)):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
+
+
 class GoogleAIModelExplainer:
     """
     Google Gemini AI-based explanation tool for reinforcement learning models.
     """
 
-    def __init__(self, api_key=None, model_name="gemini-2.5-pro"):
+    def __init__(self, api_key=None, model_name="gemini-2.5-flash"):
         self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
         self.model_name = model_name
 
         if not self.api_key:
             print("Warning: No Google API key provided. Using local analysis only.")
-        
+
         self._configure_google_ai()
 
     def _configure_google_ai(self):
@@ -45,7 +60,7 @@ class GoogleAIModelExplainer:
         Return the list as a JSON array of strings. For example:
         ["Depot, Central Middlesbrough", "Teesside University, Middlesbrough", "Riverside Stadium, Middlesbrough", ...]
         """
-        
+
         if not self.available:
             print("Google AI not available for location generation.")
             return None
@@ -63,7 +78,6 @@ class GoogleAIModelExplainer:
         except (Exception, json.JSONDecodeError) as e:
             print(f"Failed to generate locations with AI. Error: {e}")
             return None
-
 
     def analyze_performance(self, results: Dict[str, Dict], env_config: Dict) -> str:
         results_str = self._format_results_for_google(results)
@@ -98,12 +112,12 @@ class GoogleAIModelExplainer:
         if len(performance_history) < 10:
             return "Not enough data for tuning recommendations."
 
-        trend = "improving" if np.mean(performance_history[-10:]) > np.mean(performance_history[:10]) else "stagnant or degrading"
-
+        # trend = "improving" if np.mean(performance_history[-10:]) > np.mean(performance_history[:10]) else "stagnant or degrading"
+        # The reward history shows a trend that is {trend}.
         prompt = f"""
         As an expert in reinforcement learning, analyze the performance of a {agent_type} agent.
-        The reward history shows a trend that is {trend}.
-        The last 10 rewards are: {performance_history[-10:]}.
+
+        The last 50 rewards are: {performance_history[-50:]}.
 
         Based on this, provide specific, actionable hyperparameter tuning recommendations for:
         - alpha (learning rate)
@@ -123,7 +137,8 @@ class GoogleAIModelExplainer:
                 return f"AI recommendations failed: {e}"
         return "AI recommendations not available."
 
-    def generate_training_report(self, training_history: Dict[str, List[float]], final_results: Dict[str, Dict], env_config: Dict) -> str:
+    def generate_training_report(self, training_history: Dict[str, List[float]], final_results: Dict[str, Dict],
+                                 env_config: Dict) -> str:
         # This method can be expanded similarly to the others
         return "Training report generation is a premium feature."
 
