@@ -8,34 +8,31 @@
 #
 # The script uses `osmnx` to calculate real road network distances and leverages a Google AI model to provide a final analysis and explanation of the results.
 # %%
-import json
+import os
 import time
+
+import folium
 import matplotlib.pyplot as plt
 import numpy as np
+from IPython.display import display, Markdown
 from dotenv import load_dotenv
-from IPython.display import display, Markdown, HTML
-import folium
-from folium.plugins import MarkerCluster
 
 print("All libraries imported successfully!")
 try:
     import osmnx as ox
     import networkx as nx
+
     OSMNX_AVAILABLE = True
 except ImportError:
     OSMNX_AVAILABLE = False
 
-from dqn import DQNAgent
-from environment import DeliveryEnvironment
-from google_LLM import GoogleAIModelExplainer
-from osm_client import OSMClient
-from q_learning import QLearningAgent
-from sarsa import SarsaAgent
-from informed_search import AStarAgent, GreedyBestFirstSearchAgent, InformedSearchAgent
+from ai_models import *
+from world import *
 
 if not OSMNX_AVAILABLE:
     print("\nWARNING: OSMnx is not available. The 'network' distance metric will fail.")
     print("Please install with: pip install osmnx")
+
 
 # %% [markdown]
 # ### Visualization and Helper Functions
@@ -49,18 +46,18 @@ def plot_delivery_route(env, route, file_path, agent_name=""):
     if not isinstance(locations, np.ndarray) or locations.size == 0:
         print(f"    Cannot plot route for {file_path}: No locations provided.")
         return None
-        
+
     map_center = np.mean(locations, axis=0)
     m = folium.Map(location=map_center, zoom_start=12, tiles="cartodbpositron")
-    
+
     title_html = f'<h3 align="center" style="font-size:16px"><b>Route for {agent_name}</b></h3>'
     m.get_root().html.add_child(folium.Element(title_html))
-    
+
     # Depot Marker
     folium.Marker(
-        locations[0], 
-        popup="Depot", 
-        tooltip="DEPOT (Start/End)", 
+        locations[0],
+        popup="Depot",
+        tooltip="DEPOT (Start/End)",
         icon=folium.Icon(color="red", icon="warehouse", prefix="fa")
     ).add_to(m)
 
@@ -72,16 +69,17 @@ def plot_delivery_route(env, route, file_path, agent_name=""):
             locations[loc_index],
             popup=f"Stop {i}: Location {loc_index}",
             tooltip=f"Stop #{i}",
-            icon=folium.DivIcon(html=f'<div style="font-family: sans-serif; background-color: #3388ff; color: white; border-radius: 50%; width: 24px; height: 24px; text-align: center; line-height: 24px; font-weight: bold;">{i}</div>')
+            icon=folium.DivIcon(
+                html=f'<div style="font-family: sans-serif; background-color: #3388ff; color: white; border-radius: 50%; width: 24px; height: 24px; text-align: center; line-height: 24px; font-weight: bold;">{i}</div>')
         ).add_to(m)
 
     # Layer 1: Straight-line connections (as-the-crow-flies)
     route_coords = [locations[i] for i in route]
     folium.PolyLine(
-        route_coords, 
-        color="purple", 
-        weight=2, 
-        opacity=0.8, 
+        route_coords,
+        color="purple",
+        weight=2,
+        opacity=0.8,
         dash_array='5, 10',
         tooltip="Straight-line path"
     ).add_to(m)
@@ -91,11 +89,12 @@ def plot_delivery_route(env, route, file_path, agent_name=""):
         G = env.osmnx_client.G
         for i in range(len(route) - 1):
             start_node = env.nodes[route[i]]
-            end_node = env.nodes[route[i+1]]
+            end_node = env.nodes[route[i + 1]]
             try:
                 path_nodes = nx.shortest_path(G, start_node, end_node, weight='length')
                 path_coords = [(G.nodes[node]['y'], G.nodes[node]['x']) for node in path_nodes]
-                folium.PolyLine(path_coords, color="green", weight=4, opacity=0.7, tooltip="Road network path").add_to(m)
+                folium.PolyLine(path_coords, color="green", weight=4, opacity=0.7, tooltip="Road network path").add_to(
+                    m)
             except (nx.NetworkXNoPath, KeyError):
                 # If a road path isn't found, just skip it for that segment
                 continue
@@ -104,14 +103,15 @@ def plot_delivery_route(env, route, file_path, agent_name=""):
     print(f"    ✓ Interactive map saved to {file_path}")
     return m
 
-def plot_performance_comparison(results):
+
+def plot_performance_comparison(results, output_dir):
     """Plots bar charts comparing algorithm performance on distance and duration."""
     labels = list(results.keys())
     distances = [res['total_distance_km'] for res in results.values()]
     durations = [res['duration_sec'] for res in results.values()]
-    
+
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
-    
+
     # Plot for distance
     ax1.bar(labels, distances, color=plt.cm.plasma(np.linspace(0.4, 0.8, len(labels))), edgecolor='black')
     ax1.set_ylabel('Total Distance (km)')
@@ -119,7 +119,7 @@ def plot_performance_comparison(results):
     ax1.grid(True, axis='y', linestyle='--', alpha=0.6)
     for i, v in enumerate(distances):
         ax1.text(i, v + 0.5, f"{v:.2f}", ha='center', va='bottom')
-        
+
     # Plot for duration
     ax2.bar(labels, durations, color=plt.cm.viridis(np.linspace(0.4, 0.8, len(labels))), edgecolor='black')
     ax2.set_ylabel('Execution Time (seconds)')
@@ -131,10 +131,11 @@ def plot_performance_comparison(results):
     plt.setp(ax1.get_xticklabels(), rotation=20, ha="right")
     plt.setp(ax2.get_xticklabels(), rotation=20, ha="right")
     plt.tight_layout()
-    plt.savefig("algorithm_performance_comparison.png", dpi=150)
+    plt.savefig(os.path.join(output_dir, "algorithm_performance_comparison.png"), dpi=150)
     plt.show()
 
-def plot_optimization_impact(initial_rewards, final_rewards):
+
+def plot_optimization_impact(initial_rewards, final_rewards, output_dir):
     """
     Generates a plot comparing learning curves before and after optimization for RL agents.
     """
@@ -143,25 +144,25 @@ def plot_optimization_impact(initial_rewards, final_rewards):
         return
 
     fig, axes = plt.subplots(len(rl_agent_names), 1, figsize=(12, 6 * len(rl_agent_names)), squeeze=False)
-    
+
     for i, name in enumerate(rl_agent_names):
         ax = axes[i, 0]
         # Plot initial (before optimization) learning curve
-        initial_curve = np.convolve(initial_rewards[name], np.ones(100)/100, mode='valid')
+        initial_curve = np.convolve(initial_rewards[name], np.ones(100) / 100, mode='valid')
         ax.plot(initial_curve, label='Before Optimization (Tuning Phase)', color='orange', linestyle='--')
-        
+
         # Plot final (after optimization) learning curve
-        final_curve = np.convolve(final_rewards[name], np.ones(100)/100, mode='valid')
+        final_curve = np.convolve(final_rewards[name], np.ones(100) / 100, mode='valid')
         ax.plot(final_curve, label='After Optimization (Final Run)', color='green')
-        
+
         ax.set_title(f'Optimization Impact for {name}', fontsize=14, fontweight='bold')
         ax.set_xlabel('Episodes')
         ax.set_ylabel('Moving Average Reward')
         ax.legend()
         ax.grid(True, linestyle='--', alpha=0.6)
-        
+
     plt.tight_layout()
-    plt.savefig("rl_optimization_impact.png", dpi=150)
+    plt.savefig(os.path.join(output_dir, "rl_optimization_impact.png"), dpi=150)
     plt.show()
 
 
@@ -175,6 +176,7 @@ def generate_random_locations(city_name, num_locations):
     lons = np.random.uniform(min_lon, max_lon, num_locations)
     return np.vstack((lats, lons)).T
 
+
 def train_agent(agent, env, num_episodes, is_dqn=False):
     """A unified training function for all RL agent types."""
     reward_history = []
@@ -187,9 +189,9 @@ def train_agent(agent, env, num_episodes, is_dqn=False):
             if not possible_actions: break
             action = agent.choose_action(state, possible_actions)
             if action is None: break
-            
+
             next_state_tuple, reward, done = env.step(action)
-            
+
             if is_dqn:
                 next_state = env._get_state(vectorized=True)
                 agent.add_experience(state, action, reward, next_state, done)
@@ -202,14 +204,15 @@ def train_agent(agent, env, num_episodes, is_dqn=False):
                     agent.update_q_table(state, action, reward, next_state_tuple, next_action)
                     state = next_state_tuple
                     action = next_action
-                else: # Q-Learning
+                else:  # Q-Learning
                     agent.update_q_table(state, action, reward, next_state_tuple, next_possible_actions)
                     state = next_state_tuple
-            
+
             total_reward += reward
         agent.decay_epsilon()
         reward_history.append(total_reward)
     return reward_history
+
 
 def evaluate_agent(agent, env, is_dqn=False):
     """Evaluates the RL agent's performance to find the best route."""
@@ -217,35 +220,40 @@ def evaluate_agent(agent, env, is_dqn=False):
     route = [env.start_pos_index]
     original_epsilon = agent.epsilon
     agent.epsilon = 0.0
-    
+
     while len(route) <= env.num_locations:
         possible_actions = env.get_possible_actions()
         if not possible_actions: break
         action = agent.choose_action(state, possible_actions)
         if action is None or action in route: break
-        
+
         route.append(action)
         state, _, done = env.step(action)
         if is_dqn: state = env._get_state(vectorized=True)
         if done: break
-            
+
     if route[-1] != env.start_pos_index:
         route.append(env.start_pos_index)
-        
+
     agent.epsilon = original_epsilon
-    total_distance = sum(env.distance_matrix[route[i]][route[i+1]] for i in range(len(route)-1))
+    total_distance = sum(env.distance_matrix[route[i]][route[i + 1]] for i in range(len(route) - 1))
     return route, total_distance / 1000
+
 
 # %% [markdown]
 # ### Main Execution
 # %%
 # --- CONFIGURATION ---
 CITY = "Middlesbrough"
-NUM_PARCELS = 10
+NUM_PARCELS = 20
 DISTANCE_METRIC = 'network'
 NUM_EPISODES_TUNE = 500
 NUM_EPISODES_FINAL = 3000
+OUTPUT_DIR = "visualisations"
 load_dotenv()
+
+# Create output directory if it doesn't exist
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 print(f"""
 Delivery Route Optimization Analysis
@@ -261,14 +269,29 @@ RL Final Episodes: {NUM_EPISODES_FINAL}
 if not OSMNX_AVAILABLE:
     exit("OSMnx is required for 'network' distance metric. Please install it and try again.")
 
-locations_coords = generate_random_locations(CITY, NUM_PARCELS + 1)
-if locations_coords is None:
-    exit("Failed to generate locations. Exiting.")
+# Initialize the AI explainer to use for location generation
+explainer = GoogleAIModelExplainer()
+env = None
 
-print("\nInitializing environment and building road network distance matrix...")
-start_time = time.time()
-env = DeliveryEnvironment(locations=locations_coords, city_name=CITY, distance_metric=DISTANCE_METRIC)
-print(f"  ✓ Environment ready in {time.time() - start_time:.2f}s. Matrix shape: {env.distance_matrix.shape}")
+# Attempt to generate locations using AI
+if explainer.available:
+    print("\nAttempting to generate realistic locations using Google AI...")
+    ai_addresses = explainer.generate_locations_for_city(CITY, NUM_PARCELS + 1)
+    if ai_addresses:
+        print("  ✓ Successfully generated addresses from AI.")
+        env = DeliveryEnvironment(addresses=ai_addresses, city_name=CITY, distance_metric=DISTANCE_METRIC)
+    else:
+        print("  ✗ AI failed to return valid addresses. Falling back to random locations.")
+
+# Fallback to random locations if AI fails or is unavailable
+if env is None:
+    print("  Generating random locations as a fallback...")
+    locations_coords = generate_random_locations(CITY, NUM_PARCELS + 1)
+    if locations_coords is None:
+        exit("Failed to generate random locations. Exiting.")
+    env = DeliveryEnvironment(locations=locations_coords, city_name=CITY, distance_metric=DISTANCE_METRIC)
+
+print(f"\n  ✓ Environment ready. Matrix shape: {env.distance_matrix.shape}")
 
 # --- 2. INITIALIZE AGENTS ---
 rl_agents = {
@@ -283,18 +306,18 @@ informed_search_agents = {
 all_agents = {**rl_agents, **informed_search_agents}
 
 # --- 3. RL AGENT TUNING PHASE ---
-print("\n" + "="*50)
+print("\n" + "=" * 50)
 print("Phase 1: RL Agent Tuning")
-print("="*50)
+print("=" * 50)
 initial_reward_histories = {}
 for name, agent in rl_agents.items():
     print(f"  Tuning {name} for {NUM_EPISODES_TUNE} episodes...")
     initial_reward_histories[name] = train_agent(agent, env, NUM_EPISODES_TUNE, isinstance(agent, DQNAgent))
 
 # --- 4. MODEL OPTIMIZATION & FINAL RUN ---
-print("\n" + "="*50)
+print("\n" + "=" * 50)
 print("Phase 2: Optimization and Final Run")
-print("="*50)
+print("=" * 50)
 final_results = {}
 best_route_info = {"agent": None, "route": [], "distance": float('inf')}
 final_reward_histories = {}
@@ -309,10 +332,10 @@ optimized_params = {
 for name, agent in all_agents.items():
     print(f"\n--- Processing Agent: {name} ---")
     start_time = time.time()
-    
+
     if isinstance(agent, InformedSearchAgent):
         route, distance = agent.solve(env)
-    else: # RL Agent
+    else:  # RL Agent
         print(f"  Applying optimized parameters and running for {NUM_EPISODES_FINAL} episodes...")
         params = optimized_params.get(name, {})
         agent_class = agent.__class__
@@ -320,8 +343,9 @@ for name, agent in all_agents.items():
             final_agent = agent_class(state_size=env.get_state_size(), action_size=env.num_locations, **params)
         else:
             final_agent = agent_class(action_space=list(range(env.num_locations)), **params)
-        
-        final_reward_histories[name] = train_agent(final_agent, env, NUM_EPISODES_FINAL, isinstance(final_agent, DQNAgent))
+
+        final_reward_histories[name] = train_agent(final_agent, env, NUM_EPISODES_FINAL,
+                                                   isinstance(final_agent, DQNAgent))
         print("  Evaluating final policy...")
         route, distance = evaluate_agent(final_agent, env, isinstance(final_agent, DQNAgent))
 
@@ -335,7 +359,7 @@ for name, agent in all_agents.items():
     print(f"  ✓ Finished in {duration:.2f}s. Route Distance: {distance:.2f} km")
 
     # Plot the route for this specific agent
-    agent_map_filename = f"route_{name.replace(' ', '_')}.html"
+    agent_map_filename = os.path.join(OUTPUT_DIR, f"route_{name.replace(' ', '_')}.html")
     plot_delivery_route(env, route, agent_map_filename, agent_name=name)
 
     if distance < best_route_info["distance"]:
@@ -343,24 +367,24 @@ for name, agent in all_agents.items():
         print(f"  >>> New best route found by {name}! <<<")
 
 # --- 5. VISUALIZE AND EXPORT RESULTS ---
-print("\n" + "="*50)
+print("\n" + "=" * 50)
 print("VISUALIZING AND EXPORTING RESULTS")
-print("="*50)
+print("=" * 50)
 
-plot_optimization_impact(initial_reward_histories, final_reward_histories)
-plot_performance_comparison(final_results)
+plot_optimization_impact(initial_reward_histories, final_reward_histories, OUTPUT_DIR)
+plot_performance_comparison(final_results, OUTPUT_DIR)
 
 # Save a separate map for the best overall route
-best_map_filename = f"best_overall_route_{CITY.lower()}.html"
-plot_delivery_route(env, best_route_info["route"], best_map_filename, agent_name=f"Best Route ({best_route_info['agent']})")
+best_map_filename = os.path.join(OUTPUT_DIR, f"best_overall_route_{CITY.lower()}.html")
+plot_delivery_route(env, best_route_info["route"], best_map_filename,
+                    agent_name=f"Best Route ({best_route_info['agent']})")
 
 # --- 6. FINAL AI-POWERED ANALYSIS ---
-explainer = GoogleAIModelExplainer()
 if explainer.available:
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("Requesting AI-Powered Analysis from Google")
-    print("="*50)
-    
+    print("=" * 50)
+
     env_config = env.get_environment_summary()
     env_config["rl_tuning_episodes"] = NUM_EPISODES_TUNE
     env_config["rl_final_episodes"] = NUM_EPISODES_FINAL
