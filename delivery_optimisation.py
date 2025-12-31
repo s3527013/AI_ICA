@@ -28,7 +28,7 @@ try:
 except ImportError:
     OSMNX_AVAILABLE = False
 
-from ai_models import *
+from algorithms import *
 from world import *
 
 if not OSMNX_AVAILABLE:

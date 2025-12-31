@@ -6,7 +6,6 @@ and providing hyperparameter recommendations.
 
 import json
 import os
-import re
 from typing import Dict, List, Optional
 
 import google.generativeai as genai
