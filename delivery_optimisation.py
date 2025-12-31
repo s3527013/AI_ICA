@@ -219,6 +219,26 @@ load_dotenv()
 
 # Scenario 1
 scenario_1_results = run_simulation(
+    scenario_name="small_scale",
+    city="Middlesbrough",
+    num_parcels=5,
+    distance_metric='network',
+    tune_episodes=100,
+    final_episodes=1000,
+    output_dir="visualisations"
+)
+if scenario_1_results:
+    all_scenario_results["small_scale"] = scenario_1_results
+
+print("\nAll simulations finished.")
+
+# %% [markdown]
+# ### 5. Run Scenario 2
+# This will run the second scenario.
+# %%
+
+# Scenario 2
+scenario_2_results = run_simulation(
     scenario_name="standard_scale",
     city="Middlesbrough",
     num_parcels=20,
@@ -227,17 +247,17 @@ scenario_1_results = run_simulation(
     final_episodes=3000,
     output_dir="visualisations"
 )
-if scenario_1_results:
-    all_scenario_results["standard_scale"] = scenario_1_results
+if scenario_2_results:
+    all_scenario_results["standard_scale"] = scenario_2_results
 
 print("\nAll simulations finished.")
 
 # %% [markdown]
-# ### 5. Run Scenario 2
-# This will run the second scenario.
+# ### 6. Run Scenario 3
+# This will run the Third scenario.
 # %%
-# Scenario 2
-scenario_2_results = run_simulation(
+# Scenario 3
+scenario_3_results = run_simulation(
     scenario_name="large_scale",
     city="Middlesbrough",
     num_parcels=50,
@@ -247,13 +267,13 @@ scenario_2_results = run_simulation(
     output_dir="visualisations",
     include_astar=False
 )
-if scenario_2_results:
-    all_scenario_results["large_scale"] = scenario_2_results
+if scenario_3_results:
+    all_scenario_results["large_scale"] = scenario_3_results
 
 print("\nAll simulations finished.")
 
 # %% [markdown]
-# ### 6. Final Multi-Scenario Analysis
+# ### 7. Final Multi-Scenario Analysis
 # This final step provides a high-level comparison of how the algorithms performed across the different scenarios, focusing on scalability and overall performance.
 # %%
 explainer = GoogleAIModelExplainer()
@@ -268,7 +288,7 @@ else:
     print("\nCould not generate multi-scenario analysis. (AI unavailable or no scenarios were run).")
 
 # %% [markdown]
-# ### 7. Cross-Scenario Performance Visualization
+# ### 8. Cross-Scenario Performance Visualization
 # This chart provides a direct visual comparison of algorithm performance across the different scenarios that were run.
 # %%
 if all_scenario_results:
