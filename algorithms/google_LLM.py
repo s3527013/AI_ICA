@@ -84,12 +84,27 @@ class GoogleAIModelExplainer:
             Optional[List[str]]: A list of address strings, or None if the generation fails.
         """
         prompt = f"""
-        You are a logistics planning assistant. Your task is to generate a list of {num_locations}
-        realistic delivery locations within {city}. The first location must be a central depot.
-        The rest should be a mix of commercial and residential addresses.
+        You are a logistics planning assistant generating delivery locations for route optimization.
 
-        IMPORTANT: Your response MUST be a raw JSON array of strings, with no additional text,
-        conversation, or markdown formatting.
+        Generate exactly {num_locations} delivery locations in {city} with these requirements:
+
+        1. **FIRST LOCATION MUST BE**: A major logistics depot, distribution center, or warehouse that serves as a central hub in {city}.
+
+        2. **REMAINING LOCATIONS**: Residential addresses that are:
+           - **Geocodable**: Must be real, verifiable addresses that exist in OSM (OpenStreetMap)
+           - **Accessible**: Locations reachable by road (not pedestrian-only zones or restricted areas)
+           - **Realistic**: Actual residential buildings
+           - **Diverse**: Spread across different neighborhoods/areas of {city}
+
+        3. **CRITICAL VALIDATION**: 
+           - Verify each address exists in {city} (no fictional addresses)
+           - Include only locations that can be geocoded to coordinates via OSMnx
+           - Avoid: vague areas, future developments, or private estates, apartment/suite numbers (only building addresses)
+
+        4. **OUTPUT FORMAT**: Raw JSON array of strings only, no additional text.
+           Example: ["Warehouse Address", "Residential  Address 1", "Residential Address 2", ...]
+
+        Generate {num_locations} locations for {city}:
         """
 
         if not self.available:

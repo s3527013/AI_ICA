@@ -14,8 +14,6 @@
 # %%
 import os
 import time
-import folium
-import matplotlib.pyplot as plt
 import numpy as np
 from IPython.display import display, Markdown
 from dotenv import load_dotenv
@@ -30,111 +28,16 @@ except ImportError:
 
 from algorithms import *
 from world import *
+from utils import *
 
 if not OSMNX_AVAILABLE:
     print("\nWARNING: OSMnx is not available. The 'network' distance metric will fail.")
     print("Please install with: pip install osmnx")
 
 # %% [markdown]
-# ### 2. Visualization and Helper Functions
-# This cell defines all the functions used for plotting charts and maps.
+# ### 2. Helper Functions
+# This cell defines the helper functions for training and evaluating agents.
 # %%
-def plot_delivery_route(env, route, file_path, agent_name=""):
-    """
-    Creates an interactive Folium map, saves it to a file, and displays it in the notebook.
-    """
-    locations = env.locations
-    if not isinstance(locations, np.ndarray) or locations.size == 0:
-        print(f"    Cannot plot route for {file_path}: No locations provided.")
-        return
-
-    map_center = np.mean(locations, axis=0)
-    m = folium.Map(location=map_center, zoom_start=12, tiles="cartodbpositron")
-
-    title_html = f'<h3 align="center" style="font-size:16px"><b>Route for {agent_name}</b></h3>'
-    m.get_root().html.add_child(folium.Element(title_html))
-
-    folium.Marker(locations[0], popup="Depot", tooltip="DEPOT (Start/End)", icon=folium.Icon(color="red", icon="warehouse", prefix="fa")).add_to(m)
-
-    for i, loc_index in enumerate(route):
-        if i == 0 or i == len(route) - 1:
-            continue
-        folium.Marker(locations[loc_index], popup=f"Stop {i}: Location {loc_index}", tooltip=f"Stop #{i}", icon=folium.DivIcon(html=f'<div style="font-family: sans-serif; background-color: #3388ff; color: white; border-radius: 50%; width: 24px; height: 24px; text-align: center; line-height: 24px; font-weight: bold;">{i}</div>')).add_to(m)
-
-    route_coords = [locations[i] for i in route]
-    folium.PolyLine(route_coords, color="purple", weight=2, opacity=0.8, dash_array='5, 10', tooltip="Straight-line path").add_to(m)
-
-    if env.distance_metric == 'network' and env.osmnx_client and hasattr(env.osmnx_client, 'G'):
-        G = env.osmnx_client.G
-        for i in range(len(route) - 1):
-            try:
-                path_nodes = nx.shortest_path(G, env.nodes[route[i]], env.nodes[route[i+1]], weight='length')
-                path_coords = [(G.nodes[node]['y'], G.nodes[node]['x']) for node in path_nodes]
-                folium.PolyLine(path_coords, color="green", weight=4, opacity=0.7, tooltip="Road network path").add_to(m)
-            except (nx.NetworkXNoPath, KeyError):
-                continue
-
-    m.save(file_path)
-    print(f"    ✓ Interactive map saved to {file_path}")
-    display(m)
-
-def plot_performance_comparison(results, output_dir, scenario_name):
-    """Plots bar charts, saves them to a file, and displays them in the notebook."""
-    labels = list(results.keys())
-    distances = [res['total_distance_km'] for res in results.values()]
-    durations = [res['duration_sec'] for res in results.values()]
-
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
-    fig.suptitle(f'Performance Comparison: {scenario_name}', fontsize=16, fontweight='bold')
-
-    ax1.bar(labels, distances, color=plt.cm.plasma(np.linspace(0.4, 0.8, len(labels))), edgecolor='black')
-    ax1.set_ylabel('Total Distance (km)')
-    ax1.set_title('Route Distance', fontsize=14)
-    ax1.grid(True, axis='y', linestyle='--', alpha=0.6)
-    for i, v in enumerate(distances):
-        ax1.text(i, v + 0.5, f"{v:.2f}", ha='center', va='bottom')
-
-    ax2.bar(labels, durations, color=plt.cm.viridis(np.linspace(0.4, 0.8, len(labels))), edgecolor='black')
-    ax2.set_ylabel('Execution Time (seconds)')
-    ax2.set_title('Execution Time', fontsize=14)
-    ax2.grid(True, axis='y', linestyle='--', alpha=0.6)
-    for i, v in enumerate(durations):
-        ax2.text(i, v + 0.1, f"{v:.2f}s", ha='center', va='bottom')
-
-    plt.setp(ax1.get_xticklabels(), rotation=20, ha="right")
-    plt.setp(ax2.get_xticklabels(), rotation=20, ha="right")
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    
-    save_path = os.path.join(output_dir, f"performance_comparison_{scenario_name}.png")
-    plt.savefig(save_path, dpi=150)
-    print(f"    ✓ Performance comparison chart saved to {save_path}")
-    plt.show()
-
-def plot_optimization_impact(initial_rewards, final_rewards, output_dir, scenario_name):
-    """Plots optimization impact, saves it to a file, and displays it in the notebook."""
-    rl_agent_names = list(initial_rewards.keys())
-    if not rl_agent_names:
-        return
-
-    fig, axes = plt.subplots(len(rl_agent_names), 1, figsize=(12, 6 * len(rl_agent_names)), squeeze=False)
-    fig.suptitle(f'RL Agent Optimization Impact: {scenario_name}', fontsize=16, fontweight='bold')
-
-    for i, name in enumerate(rl_agent_names):
-        ax = axes[i, 0]
-        ax.plot(np.convolve(initial_rewards[name], np.ones(100)/100, mode='valid'), label='Before Optimization', color='orange', linestyle='--')
-        ax.plot(np.convolve(final_rewards[name], np.ones(100)/100, mode='valid'), label='After Optimization', color='green')
-        ax.set_title(f'Optimization Impact for {name}', fontsize=14)
-        ax.set_xlabel('Episodes')
-        ax.set_ylabel('Moving Average Reward')
-        ax.legend()
-        ax.grid(True, linestyle='--', alpha=0.6)
-
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    save_path = os.path.join(output_dir, f"rl_optimization_impact_{scenario_name}.png")
-    plt.savefig(save_path, dpi=150)
-    print(f"    ✓ Optimization impact chart saved to {save_path}")
-    plt.show()
-
 def generate_random_locations(city_name, num_locations):
     osm = OSMClient()
     bbox = osm.get_bounding_box(city_name)
@@ -308,7 +211,7 @@ def run_simulation(scenario_name, city, num_parcels, distance_metric, tune_episo
     return final_results
 
 # %% [markdown]
-# ### 4. Run Scenarios
+# ### 4. Run Scenario 1
 # This is the main execution block. It will run all defined simulation scenarios.
 # %%
 all_scenario_results = {}
@@ -327,6 +230,12 @@ scenario_1_results = run_simulation(
 if scenario_1_results:
     all_scenario_results["standard_scale"] = scenario_1_results
 
+print("\nAll simulations finished.")
+
+# %% [markdown]
+# ### 5. Run Scenario 2
+# This will run the second scenario.
+# %%
 # Scenario 2
 scenario_2_results = run_simulation(
     scenario_name="large_scale",
@@ -344,7 +253,7 @@ if scenario_2_results:
 print("\nAll simulations finished.")
 
 # %% [markdown]
-# ### 5. Final Multi-Scenario Analysis
+# ### 6. Final Multi-Scenario Analysis
 # This final step provides a high-level comparison of how the algorithms performed across the different scenarios, focusing on scalability and overall performance.
 # %%
 explainer = GoogleAIModelExplainer()
@@ -357,3 +266,10 @@ if explainer.available and all_scenario_results:
     display(Markdown(multi_scenario_analysis))
 else:
     print("\nCould not generate multi-scenario analysis. (AI unavailable or no scenarios were run).")
+
+# %% [markdown]
+# ### 7. Cross-Scenario Performance Visualization
+# This chart provides a direct visual comparison of algorithm performance across the different scenarios that were run.
+# %%
+if all_scenario_results:
+    plot_multi_scenario_comparison(all_scenario_results, "visualisations")
